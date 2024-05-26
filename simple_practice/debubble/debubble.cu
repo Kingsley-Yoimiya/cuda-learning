@@ -13,7 +13,7 @@ using namespace std;
 
 #define GRID_SIZE 128
 #define BLOCK_SIZE 256
-#define BATCH 8192
+#define BATCH 65536
 #define cudaCheckError() {                                                      \
     cudaError_t err = cudaGetLastError();                                       \
     if (err != cudaSuccess) {                                                   \

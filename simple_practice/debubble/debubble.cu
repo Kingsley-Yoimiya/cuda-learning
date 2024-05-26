@@ -13,7 +13,7 @@ using namespace std;
 
 #define GRID_SIZE 128
 #define BLOCK_SIZE 256
-#define BATCH 65536
+#define BATCH 131072
 #define cudaCheckError() {                                                      \
     cudaError_t err = cudaGetLastError();                                       \
     if (err != cudaSuccess) {                                                   \
@@ -196,9 +196,9 @@ int main() {
     return 0;
 }
 /*GENERATE OK!536870912
-65536 256
-536346554
-2.01072
-28.8447
+8192 32
+536347455
+1.34073
+28.7449
 536870912 536870912
 */

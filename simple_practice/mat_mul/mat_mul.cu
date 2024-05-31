@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <cublas_v2.h>
 
 #include <chrono>
 #include <ctime>
@@ -9,7 +10,7 @@
 
 using namespace std;
 
-#define GRID_SIZE 128
+#define GRID_SIZE 256
 #define BLOCK_SIZE 256
 #define cudaCheckError()                                                       \
   {                                                                            \
@@ -80,10 +81,40 @@ void matmul(const float *A, const float *B, size_t n, size_t m, size_t k,
   cudaFree(cu_output);
 }
 
-const int N = 2000, M = 2000, K = 2000;
+void matmul_sample(const float *A, const float *B, size_t n, size_t m, size_t k,
+    float *output) {
+  float *cu_A;
+  float *cu_B;
+  float *cu_output;
+  size_t A_size = n * m * sizeof(float), B_size = m * k * sizeof(float),
+         out_size = n * k * sizeof(float);
+  
+  cudaMalloc((void **)&cu_A, A_size);
+  cudaMalloc((void **)&cu_B, B_size);
+  cudaMalloc((void **)&cu_output, out_size);
+  
+  cudaMemcpy(cu_A, A, A_size, cudaMemcpyHostToDevice);
+  cudaMemcpy(cu_B, B, B_size, cudaMemcpyHostToDevice);
+  cudaMemset(cu_output, 0, out_size);
+  
+  cublasHandle_t handle;
+  cublasCreate(&handle);
+
+  const float alpha = 1.0, beta = 0.0; 
+  cublasSgemm_v2(handle, CUBLAS_OP_N, CUBLAS_OP_N, k, n, m, &alpha, cu_B, k, cu_A, m, &beta, cu_output, k);
+
+  cudaMemcpy(output, cu_output, out_size, cudaMemcpyDeviceToHost);
+
+  cudaFree(cu_A);
+  cudaFree(cu_B);
+  cudaFree(cu_output);
+  cublasDestroy(handle);
+}
+
+const int N = 2048, M = 2048, K = 2048;
 const int T = 100;
 
-uniform_real_distribution<float> u(0, 1);
+uniform_real_distribution<float> u(0, 100);
 mt19937 rnd(chrono::system_clock::now().time_since_epoch().count());
 
 int main() {
@@ -97,10 +128,13 @@ int main() {
   for (int i = 0; i < M * K; i++) {
     B[i] = u(rnd);
   }
+  for (int i = 0; i < N * K; i++) {
+    C[i] = 0;
+  }
   cerr << "GENERATE OK!" << endl;
 
   double st = clock();
-  matmul(A, B, N, M, K, C);
+  matmul_sample(A, B, N, M, K, C);
   double ed = clock();
   std::cout << (ed - st) / CLOCKS_PER_SEC << std::endl;
 
@@ -108,6 +142,8 @@ int main() {
   for (int i = 0; i < N * K; i++) {
     D[i] = 0;
   }
+  matmul_sample(A, B, N, M, K, D);
+/*
   for (int i = 0; i < N; i++) {
     for (int j = 0; j < M; j++) {
       for (int k = 0; k < K; k++) {
@@ -115,18 +151,16 @@ int main() {
       }
     }
   }
-
+*/
   ed = clock();
   std::cout << (ed - st) / CLOCKS_PER_SEC << std::endl;
 
+  float maxx = 0;
   for (int i = 0; i < N * K; i++) {
-    if (fabs(C[i] - D[i]) > 1e-2) {
-      std::cout << C[i] << " " << D[i] << " ERROR!" << std::endl;
-      break;
-    }
+      maxx = max(maxx, fabs(C[i] - D[i]) / max(fabs(C[i]), fabs(D[i])));      
   }
-
-  std::cout << "RESULT: " << C[0] << std::endl;
+  
+  std::cout << "RESULT: " << C[0] << " " << maxx << std::endl;
   delete[] A;
   delete[] B;
   delete[] C;

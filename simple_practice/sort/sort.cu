@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
+#include <cub/cub.cuh>
 
 #include <algorithm>
 #include <chrono>
@@ -92,7 +93,37 @@ void sort(std ::vector<int> &nums) {
   cudaFree(cu_out);
 }
 
-const int N = 5e8, M = 2000, K = 2000;
+void sort_in(std::vector<int>& nums) {
+  int num_items = nums.size();
+
+  // 分配设备内存
+  int *d_keys_in = nullptr;
+  int *d_keys_out = nullptr;
+  cudaMalloc(&d_keys_in, num_items * sizeof(int));
+  cudaMalloc(&d_keys_out, num_items * sizeof(int));
+
+  // 将数据从主机复制到设备
+  cudaMemcpy(d_keys_in, nums.data(), num_items * sizeof(int), cudaMemcpyHostToDevice);
+
+  // 确定临时存储需求
+  void *d_temp_storage = nullptr;
+  size_t temp_storage_bytes = 0;
+  cub::DeviceRadixSort::SortKeys(d_temp_storage, temp_storage_bytes, d_keys_in, d_keys_out, num_items);
+  cudaMalloc(&d_temp_storage, temp_storage_bytes);
+
+  // 执行排序操作
+  cub::DeviceRadixSort::SortKeys(d_temp_storage, temp_storage_bytes, d_keys_in, d_keys_out, num_items);
+
+  // 将结果从设备复制到主机
+  cudaMemcpy(nums.data(), d_keys_out, num_items * sizeof(int), cudaMemcpyDeviceToHost);
+
+  // 释放设备内存
+  cudaFree(d_keys_in);
+  cudaFree(d_keys_out);
+  cudaFree(d_temp_storage);
+}
+
+const int N = 5e6, M = 2000, K = 2000;
 const int T = 100;
 
 std ::uniform_real_distribution<float> u(0, 1);
@@ -114,7 +145,10 @@ int main() {
   // for(int i = 0; i < 10; i++) cout << a[i] << endl;
 
   st = clock();
-  std ::sort(c.begin(), c.end());
+  
+  //std ::sort(c.begin(), c.end());
+  sort_in(c);
+
   ed = clock();
   std::cout << (ed - st) / CLOCKS_PER_SEC << std::endl;
 
@@ -131,6 +165,12 @@ int main() {
 /*
 GENERATE OK!500000000
 139.75
-280.152
+280.152(brute)
 500000000 500000000
+*/
+/*
+GENERATE OK!5000000
+2.78544
+0.01314(cub)
+5000000 5000000
 */

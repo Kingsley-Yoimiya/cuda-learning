@@ -2,3 +2,7 @@
 *.exe
 *.exp
 *.lib
+simple-transformer/MINDlarge_train
+simple-transformer/MINDsmall_train
+simple-transformer/user_history_embedding_l.pt
+simple-transformer/user_history_embedding_s.pt

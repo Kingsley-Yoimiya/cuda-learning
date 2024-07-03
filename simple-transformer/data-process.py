@@ -35,7 +35,7 @@ def extract_wikidata_ids(entities_str):
 # 获取用户点击历史的嵌入序列
 def get_user_embedding_sequence(history, news_dict, entity_embeddings, max_length=512):
     if pd.isna(history):
-        return np.zeros((max_length, 200), dtype=np.float32)  # 假设embedding的维度是200
+        return np.zeros((max_length, 108), dtype=np.float32)  # 假设embedding的维度是200
 
     embeddings = []
     for news_id in history.split():
@@ -56,8 +56,8 @@ def get_user_embedding_sequence(history, news_dict, entity_embeddings, max_lengt
                 continue
             if len(embeddings) >= max_length:
                 break
-            embedding = np.mean(embedding, axis = 0)
-            if embedding.shape != (100, ):
+            embedding = np.pad(np.mean(embedding, axis = 0), (0, 8), mode='constant', constant_values=0)
+            if embedding.shape != (108, ):
                 print(embedding.shape)
             embeddings.append(embedding)
             # print(embedding)
@@ -66,8 +66,8 @@ def get_user_embedding_sequence(history, news_dict, entity_embeddings, max_lengt
     
     # 如果嵌入数量不足max_length，进行padding
     if len(embeddings) < max_length:
-        embeddings += [np.zeros(100, dtype=np.float32)] * (max_length - len(embeddings))
-    if np.array(embeddings[:max_length]).shape != (512, 100):
+        embeddings += [np.zeros(108, dtype=np.float32)] * (max_length - len(embeddings))
+    if np.array(embeddings[:max_length]).shape != (512, 108):
         print("FUCK", np.array(embeddings[:max_length]))
     return np.array(embeddings[:max_length])
 
@@ -84,7 +84,7 @@ cnt = 0
 user_history_embeddings = []
 for index, row in behaviors.iterrows():
     user_embedding_sequence = get_user_embedding_sequence(row['history'], news_dict, entity_embeddings)
-    if user_embedding_sequence.shape != (512, 100):
+    if user_embedding_sequence.shape != (512, 108):
         continue
     # print(user_embedding_sequence.shape)
     cnt += 1

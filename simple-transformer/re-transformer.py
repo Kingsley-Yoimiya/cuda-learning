@@ -70,7 +70,7 @@ class EncoderLayer(nn.Module):
             nn.Linear(config.intermediate_size, config.hidden_size),
         )
     def forward(self, x, mask = None):
-        x = self.resi_layers[0](x + self.atten(x, x, x, mask)) # without dropout, to be simple
+        x = self.resi_layers[0](x + self.atten(x, x, x, mask)) 
         x = self.resi_layers[1](x + self.ffn(x))
         return x
 

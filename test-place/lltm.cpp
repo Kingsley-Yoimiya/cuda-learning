@@ -9,12 +9,9 @@ at::Tensor d_sigmoid(at::Tensor z) {
 }
 #include <vector>
 
-std::vector<at::Tensor> lltm_forward(
-    at::Tensor input,
-    at::Tensor weights,
-    at::Tensor bias,
-    at::Tensor old_h,
-    at::Tensor old_cell) {
+std::vector<at::Tensor> lltm_forward(at::Tensor input, at::Tensor weights,
+                                     at::Tensor bias, at::Tensor old_h,
+                                     at::Tensor old_cell) {
   auto X = at::cat({old_h, input}, /*dim=*/1);
 
   auto gate_weights = at::addmm(bias, X, weights.transpose(0, 1));
@@ -27,18 +24,11 @@ std::vector<at::Tensor> lltm_forward(
   auto new_cell = old_cell + candidate_cell * input_gate;
   auto new_h = at::tanh(new_cell) * output_gate;
 
-  return {new_h,
-          new_cell,
-          input_gate,
-          output_gate,
-          candidate_cell,
-          X,
-          gate_weights};
+  return {new_h,          new_cell, input_gate,  output_gate,
+          candidate_cell, X,        gate_weights};
 }
 // tanh'(z) = 1 - tanh^2(z)
-at::Tensor d_tanh(at::Tensor z) {
-  return 1 - z.tanh().pow(2);
-}
+at::Tensor d_tanh(at::Tensor z) { return 1 - z.tanh().pow(2); }
 
 // elu'(z) = relu'(z) + { alpha * exp(z) if (alpha * (exp(z) - 1)) < 0, else 0}
 at::Tensor d_elu(at::Tensor z, at::Scalar alpha = 1.0) {
@@ -47,16 +37,11 @@ at::Tensor d_elu(at::Tensor z, at::Scalar alpha = 1.0) {
   return (z > 0).type_as(z) + mask.type_as(z) * (alpha * e);
 }
 
-std::vector<at::Tensor> lltm_backward(
-    at::Tensor grad_h,
-    at::Tensor grad_cell,
-    at::Tensor new_cell,
-    at::Tensor input_gate,
-    at::Tensor output_gate,
-    at::Tensor candidate_cell,
-    at::Tensor X,
-    at::Tensor gate_weights,
-    at::Tensor weights) {
+std::vector<at::Tensor>
+lltm_backward(at::Tensor grad_h, at::Tensor grad_cell, at::Tensor new_cell,
+              at::Tensor input_gate, at::Tensor output_gate,
+              at::Tensor candidate_cell, at::Tensor X, at::Tensor gate_weights,
+              at::Tensor weights) {
   auto d_output_gate = at::tanh(new_cell) * grad_h;
   auto d_tanh_new_cell = output_gate * grad_h;
   auto d_new_cell = d_tanh(new_cell) * d_tanh_new_cell + grad_cell;
@@ -85,7 +70,7 @@ std::vector<at::Tensor> lltm_backward(
 }
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("d_sigmoid", &d_sigmoid, "d_sigmoid");
+  m.def("d_sigmoid", &d_sigmoid, "d_sigmoid");
   m.def("forward", &lltm_forward, "LLTM forward");
   m.def("backward", &lltm_backward, "LLTM backward");
 }

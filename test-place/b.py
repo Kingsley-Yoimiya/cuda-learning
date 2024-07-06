@@ -1,7 +1,7 @@
 import math
 import torch
 import torch.nn as nn
-from torch.utils.cpp_extension import load_inline, load
+from torch.utils.cpp_extension import load_inline
 import time
 import torch.nn.functional as F
 
@@ -16,6 +16,10 @@ lltm_cpp = load_inline(
     # functions=["forward", "backward", "d_sigmoid"]
 )
 
+# lltm_cpp = load(
+#     name = "lltm_cpp",
+#     sources = ["lltm.cpp"],
+# )
 
 class LLTMFunction(torch.autograd.Function):
     # def __init__():

@@ -56,6 +56,15 @@ __global__ void lltm_cuda_forward_kernel(
   }
 }
 
+// __global__ void lltm_cuda_forward_kernel(
+//   const scalar_t* __restrict__ gates,
+//   const scalar_t* __restrict__ old_cell,
+//   scalar_t* __restrict__ new_h,
+//   scalar_t* __restrict__ new_cell,
+//   scalar_t* __restrict__ input_gate,
+//   scalar_t* __restrict__ output_gate,
+//   scalar_t* __restrict__ candidate_cell,
+
 std::vector<torch::Tensor> lltm_cuda_forward(
     torch::Tensor input,
     torch::Tensor weights,

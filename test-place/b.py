@@ -90,3 +90,4 @@ for _ in range(100000):
         print(_)
 
 print('Forward: {:.3f} s | Backward {:.3f} s'.format(forward, backward))
+# Forward: 19.466 s | Backward 33.959 s

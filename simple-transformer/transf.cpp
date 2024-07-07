@@ -2,6 +2,7 @@
 #include <iostream>
 #include <math.h>
 #include <tuple>
+#include <vector>
 
 const double eps = 1e-6;
 
@@ -18,13 +19,13 @@ public:
         torch::Tensor WF2, torch::Tensor BF2) {
             int B = input.size(0), L = input.size(1), D = input.size(2);
             ctx->save_for_backward({
+            std::vector<torch::Tensor> saved_list = {
                 input, WQ, BQ,
                 WK, BK,
                 WV, BV, 
                 WX, BX,
                 WF1, BF1,
                 WF2, BF2
-            });
             ctx->saved_data["d_k"] = d_k;
             auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, D / d_k}).transpose(1, 2);
             auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2).transpose(-2, -1);
@@ -32,17 +33,18 @@ public:
             auto scores = torch::matmul(Q, KT) / sqrt(D / d_k);
             auto output = torch::matmul(scores.softmax(-1), V);
             output = output.transpose(1, 2).contiguous().view({ B, L, D }) + input; // output2
-            ctx->save_for_backward({output});
             output = torch::matmul(output, WX) + BX;
             // LayerNorm
             auto mean = output.mean(-1, true);
             auto std = output.std(-1, true, true); // refer to https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
             ctx->save_for_backward({std}); // std1
+            saved_list.emplace_back(std); // std1
             // printf("%d %d\n", mean.dim(), std.dim());
             // printf("%d %d\n", mean.size(0), mean.size(1));
             // printf("%d %d\n", std.size(0), std.size(1));
             output = (output - mean) / (std + eps); // output1 
             ctx->save_for_backward({output});
+            saved_list.emplace_back(output);
             output = (torch::matmul((torch::matmul(output, WF1) + BF1), WF2) + BF2) + output;
             // temp1: (torch::matmul(output, WF1) + BF1)
             // LayerNorm
@@ -51,9 +53,10 @@ public:
             output = (output - mean) / (std + eps);
 
             ctx->save_for_backward({std}); // std2
+            saved_list.emplace_back(std); // std2
             
+            ctx->save_for_backward(saved_list);
             // TORCH_CHECK(output.dim() == 3, "ans' dim = 3");
-            return input;
     }
 
     static torch::autograd::tensor_list backward(

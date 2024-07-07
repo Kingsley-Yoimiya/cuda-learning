@@ -17,26 +17,6 @@ public:
         torch::Tensor WF1, torch::Tensor BF1,
         torch::Tensor WF2, torch::Tensor BF2) {
             int B = input.size(0), L = input.size(1), D = input.size(2);
-            auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, d_k}).transpose(1, 2);
-            auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, d_k}).transpose(1, 2).transpose(-2, -1);
-            auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, d_k}).transpose(1, 2);
-            auto scores = torch::matmul(Q, KT) / sqrt(d_k);
-            auto output = torch::matmul(scores.softmax(-1), V);
-            output = output.transpose(1, 2).contiguous().view({ B, L, D })  + input;
-            // LayerNorm
-            auto mean = output.mean(-1, true);
-            auto std = output.std(-1, true, true); // refer to https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
-            // printf("%d %d\n", mean.dim(), std.dim());
-            // printf("%d %d\n", mean.size(0), mean.size(1));
-            // printf("%d %d\n", std.size(0), std.size(1));
-            output = (output - mean) / (std + eps);
-
-            output = (torch::matmul((torch::matmul(output, WF1) + BF1), WF2) + BF2) + input;
-            // LayerNorm
-            mean = output.mean(-1, true);
-            std = output.std(-1, true, true);
-            output = (output - mean) / (std);
-
             ctx->save_for_backward({
                 input, WQ, BQ,
                 WK, BK,
@@ -45,6 +25,29 @@ public:
                 WF1, BF1,
                 WF2, BF2
             });
+            ctx->saved_data["d_k"] = d_k;
+            auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, d_k}).transpose(1, 2);
+            auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, d_k}).transpose(1, 2).transpose(-2, -1);
+            auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, d_k}).transpose(1, 2);
+            auto scores = torch::matmul(Q, KT) / sqrt(D / d_k);
+            auto output = torch::matmul(scores.softmax(-1), V);
+            output = output.transpose(1, 2).contiguous().view({ B, L, D }) + input;
+            // LayerNorm
+            auto mean = output.mean(-1, true);
+            auto std = output.std(-1, true, true); // refer to https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
+            // printf("%d %d\n", mean.dim(), std.dim());
+            // printf("%d %d\n", mean.size(0), mean.size(1));
+            // printf("%d %d\n", std.size(0), std.size(1));
+            output = (output - mean) / (std + eps);
+
+            output = (torch::matmul((torch::matmul(output, WF1) + BF1), WF2) + BF2) + output;
+            // temp1: (torch::matmul(output, WF1) + BF1)
+            // LayerNorm
+            mean = output.mean(-1, true);
+            std = output.std(-1, true, true);
+            output = (output - mean) / (std + eps);
+
+            
             // TORCH_CHECK(output.dim() == 3, "ans' dim = 3");
             return input;
     }

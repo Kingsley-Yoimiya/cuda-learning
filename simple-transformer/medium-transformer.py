@@ -131,7 +131,7 @@ config = Tr_Config(
 model = ClickPredictionModel(config)
 
 def grad_check():
-    B, L, D, K = 5, 5, 24, 10
+    B, L, D, K = 5, 8, 24, 10
     d_k = 12
     input_tensor = torch.randn(B, L, D, dtype=torch.double, requires_grad=True)
     WQ = torch.randn(D, D, dtype=torch.double, requires_grad=True)

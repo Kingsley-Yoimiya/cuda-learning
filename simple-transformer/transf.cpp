@@ -31,7 +31,7 @@ public:
             auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2).transpose(-2, -1);
             auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, D / d_k}).transpose(1, 2);
             auto scores = torch::matmul(Q, KT) / sqrt(D / d_k);
-            auto output = torch::matmul(scores.softmax(-1), V);
+            auto output = torch::matmul(scores/*.softmax(-1)*/, V);
             output = output.transpose(1, 2).contiguous().view({ B, L, D }) + input; // output2
             saved_list.emplace_back(output);
             output = torch::matmul(output, WX) + BX;
@@ -80,17 +80,17 @@ public:
         torch::Tensor WX = saved[7], d_WX = torch::empty({ D, D });
         torch::Tensor BX = saved[8], d_BX = torch::empty({ D });
         
-        int K = saved[9].size(1);
-        torch::Tensor WF1 = saved[9], d_WF1 = torch::empty({ D, K });
-        torch::Tensor BF1 = saved[10], d_BF1 = torch::empty({ K });
-        torch::Tensor WF2 = saved[11], d_WF2 = torch::empty({ K, D });
+        int SK = saved[9].size(1);
+        torch::Tensor WF1 = saved[9], d_WF1 = torch::empty({ D, SK });
+        torch::Tensor BF1 = saved[10], d_BF1 = torch::empty({ SK });
+        torch::Tensor WF2 = saved[11], d_WF2 = torch::empty({ SK, D });
         torch::Tensor BF2 = saved[12], d_BF2 = torch::empty({ D });
         torch::Tensor output2 = saved[13];
         torch::Tensor std1 = saved[14];
         torch::Tensor output1 = saved[15];
         torch::Tensor std2 = saved[16];
         // puts("PASSED #0");
-        d_output *= (std2 + eps);
+        d_output /= (std2 + eps);
 
         d_BF2 = d_output.sum(at::IntArrayRef({0, 1}));
         d_WF2 = torch::matmul((torch::matmul(output1, WF1) + BF1).transpose(-2, -1), d_output).sum(0);
@@ -99,45 +99,49 @@ public:
         d_BF1 = tmp.sum(at::IntArrayRef({0, 1}));
         // puts("PASSED #2");
         d_WF1 = torch::matmul(output1.transpose(-2, -1), tmp).sum(0);
-        d_output = torch::matmul(d_output, torch::matmul(WF1, WF2).transpose(-2, -1) + 1);
+        d_output = torch::matmul(tmp, WF1.transpose(-2, -1)) + d_output;
         // puts("PASSED #3");
+        
+        d_output /= (std1 + eps);
+
         d_BX = d_output.sum(at::IntArrayRef({0, 1}));
         d_WX = torch::matmul(output2.transpose(-2, -1), d_output).sum(0);
         d_output = torch::matmul(d_output, WX.transpose(-2, -1));
         // puts("PASSED #4");
-        d_output *= (std1 + eps);
         d_input += d_output;
         d_output = d_output.contiguous().view({B, -1, L, D / d_k}).transpose(1, 2);
         // puts("PASSED #5");
         // notice: the generation of Q, KT need scale. 
         auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, D / d_k}).transpose(1, 2) / sqrt(D / d_k);
-        auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2).transpose(-2, -1) / sqrt(D / d_k);
+        auto K = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2) / sqrt(D / d_k);
         auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, D / d_k}).transpose(1, 2);
-        auto scores_sm = (torch::matmul(Q, KT) * sqrt(D / d_k)).softmax(-1);
+        auto scores_sm = (torch::matmul(Q, K.transpose(-2, -1)) * sqrt(D / d_k));//.softmax(-1);
+        //auto scores_sm = scores.softmax(-1);
         // puts("PASSED #6");
         auto d_V = torch::matmul(scores_sm.transpose(-2, -1), d_output).transpose(1, 2).contiguous().view({B, L, D});
-        auto d_R = torch::matmul(d_output, V.transpose(-2, -1));
+        d_output = torch::matmul(d_output, V.transpose(-2, -1));
         // d_softmax !
-        
+        //printf("%d %d %d\n", d_R.size(0), d_R.size(1), d_R.size(2));
+        // d_R = scores_sm * (d_R - (scores_sm * d_R).sum({-1}, true));
         // 
-        auto d_Q = torch::matmul(d_R, KT.transpose(-2, -1)).transpose(1, 2).contiguous().view({B, L, D});
-        auto d_KT = torch::matmul(Q.transpose(-2, -1), d_R).transpose(-2, -1).transpose(1, 2).contiguous().view({B, L, D}); 
+        auto d_Q = torch::matmul(d_output, K).transpose(1, 2).contiguous().view({B, L, D});
+        auto d_K = torch::matmul(Q.transpose(-2, -1), d_output).transpose(-2, -1).transpose(1, 2).contiguous().view({B, L, D}); 
         // puts("PASSED #7");
         // notice: d_* means the (input \times W*) + B*, except d_R
         auto linearBackward = [&](const torch::Tensor &dy, torch::Tensor &dw, torch::Tensor &db, const torch::Tensor &W) {
             // y (B, L, D), W(D, D), B(D)
             // y = input * W + B
-            printf("%d %d %d\n", dy.size(0), dy.size(1), dy.size(2));
-            printf("%d %d\n", W.size(0), W.size(1));
+            // printf("%d %d %d\n", dy.size(0), dy.size(1), dy.size(2));
+            // printf("%d %d\n", W.size(0), W.size(1));
             db = dy.sum(at::IntArrayRef({0, 1}));
             dw = torch::matmul(input.transpose(-2, -1), dy).sum(0);
             d_input += torch::matmul(dy, W.transpose(-2, -1));
         };
         linearBackward(d_V, d_WV, d_BV, WV);
         linearBackward(d_Q, d_WQ, d_BQ, WQ);
-        linearBackward(d_KT, d_WK, d_BK, WK);
+        linearBackward(d_K, d_WK, d_BK, WK);
         // puts("PASSED #8");
-        puts("GENER!");
+        // puts("GENER!");
         return {
             d_input, torch::Tensor(),
             d_WQ, d_BQ,

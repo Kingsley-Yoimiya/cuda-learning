@@ -130,6 +130,38 @@ config = Tr_Config(
     )
 model = ClickPredictionModel(config)
 
+def grad_check():
+    B, L, D, K = 5, 5, 24, 10
+    d_k = 12
+    input_tensor = torch.randn(B, L, D, dtype=torch.double, requires_grad=True)
+    WQ = torch.randn(D, D, dtype=torch.double, requires_grad=True)
+    BQ = torch.randn(D, dtype=torch.double, requires_grad=True)
+    WK = torch.randn(D, D, dtype=torch.double, requires_grad=True)
+    BK = torch.randn(D, dtype=torch.double, requires_grad=True)
+    WV = torch.randn(D, D, dtype=torch.double, requires_grad=True)
+    BV = torch.randn(D, dtype=torch.double, requires_grad=True)
+    WX = torch.randn(D, D, dtype=torch.double, requires_grad=True)
+    BX = torch.randn(D, dtype=torch.double, requires_grad=True)
+    WF1 = torch.randn(D, K, dtype=torch.double, requires_grad=True)
+    BF1 = torch.randn(K, dtype=torch.double, requires_grad=True)
+    WF2 = torch.randn(K, D, dtype=torch.double, requires_grad=True)
+    BF2 = torch.randn(D, dtype=torch.double, requires_grad=True)
+    
+    if torch.autograd.gradcheck(transf_cpp.forward, (
+        input_tensor, d_k,
+        WQ, BQ,
+        WK, BK,
+        WV, BV, 
+        WX, BX,
+        WF1, BF1,
+        WF2, BF2
+    )):
+        print("OK")
+    else:
+        print("WA")
+        assert 0
+
+grad_check()
 
 # 3. 设置训练参数
 training_args = TrainingArguments(

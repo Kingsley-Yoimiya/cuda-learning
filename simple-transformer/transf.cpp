@@ -1,5 +1,7 @@
 #include <ATen/ATen.h>
 #include <iostream>
+#include <math.h>
+#include <tuple>
 
 class transformerFunc : public torch::autograd::Function<transformerFunc> {
 public:
@@ -12,16 +14,24 @@ public:
         torch::Tensor WX, torch::Tensor BX,
         torch::Tensor WF1, torch::Tensor BF1,
         torch::Tensor WF2, torch::Tensor BF2) {
+            int B = input.size(0), L = input.size(1), D = input.size(2);
+            auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, d_k}).transpose(1, 2);
+            auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, d_k}).transpose(1, 2).transpose(-2, -1);
+            auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, d_k}).transpose(1, 2);
+            auto scores = torch::matmul(Q, KT) / sqrt(d_k);
+            auto output = torch::matmul(scores.softmax(-1), V);
+            output = output.transpose(1, 2).contiguous().view({ B, L, D })  + input;
+            output = (torch::matmul((torch::matmul(output, WF1) + BF1), WF2) + BF2) + input;
             ctx->save_for_backward({
-                input,
-                WQ, BQ,
+                input, WQ, BQ,
                 WK, BK,
                 WV, BV, 
                 WX, BX,
                 WF1, BF1,
                 WF2, BF2
             });
-        return input;
+            // TORCH_CHECK(output.dim() == 3, "ans' dim = 3");
+            return input;
     }
 
     static torch::autograd::tensor_list backward(

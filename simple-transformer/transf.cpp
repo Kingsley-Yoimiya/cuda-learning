@@ -32,6 +32,7 @@ public:
             auto scores = torch::matmul(Q, KT) / sqrt(D / d_k);
             auto output = torch::matmul(scores.softmax(-1), V);
             output = output.transpose(1, 2).contiguous().view({ B, L, D }) + input;
+            output = torch::matmul(output, WX) + BX;
             // LayerNorm
             auto mean = output.mean(-1, true);
             auto std = output.std(-1, true, true); // refer to https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
@@ -40,6 +41,7 @@ public:
             // printf("%d %d\n", std.size(0), std.size(1));
             output = (output - mean) / (std + eps);
 
+            output = (output - mean) / (std + eps); // output1 
             output = (torch::matmul((torch::matmul(output, WF1) + BF1), WF2) + BF2) + output;
             // temp1: (torch::matmul(output, WF1) + BF1)
             // LayerNorm

@@ -31,13 +31,13 @@ public:
             auto KT = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2).transpose(-2, -1);
             auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, D / d_k}).transpose(1, 2);
             auto scores = torch::matmul(Q, KT) / sqrt(D / d_k);
-            auto output = torch::matmul(scores/*.softmax(-1)*/, V);
-            output = output.transpose(1, 2).contiguous().view({ B, L, D }) + input; // output2
+            auto output = torch::matmul(scores.softmax(-1), V);
+            output = output.transpose(1, 2).contiguous().view({ B, L, D }); // output2
             saved_list.emplace_back(output);
-            output = torch::matmul(output, WX) + BX;
+            output = torch::matmul(output, WX) + BX + input;
             // LayerNorm
             auto mean = output.mean(-1, true);
-            auto std = output.std(-1, true, true); // refer to https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
+            auto std = output.std(-1, false, true); // refer to https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
             saved_list.emplace_back(std); // std1
             // printf("%d %d\n", mean.dim(), std.dim());
             // printf("%d %d\n", mean.size(0), mean.size(1));
@@ -49,7 +49,7 @@ public:
             // temp2: (torch::matmul(output.transpose(1, 2), d_output, WF2.transpose(-2, -1)))
             // LayerNorm
             mean = output.mean(-1, true);
-            std = output.std(-1, true, true);
+            std = output.std(-1, false, true);
             output = (output - mean) / (std + eps);
             saved_list.emplace_back(std); // std2
             
@@ -67,24 +67,24 @@ public:
         int B = saved[0].size(0), L = saved[0].size(1), D = saved[0].size(2);
         int d_k = ctx->saved_data["d_k"].toInt();
         // printf("%d %d %d %d\n", B, L, D, d_k);
-        torch::Tensor input = saved[0], d_input = torch::empty({ B, L, D });
+        torch::Tensor input = saved[0], d_input = torch::zeros({ B, L, D }, torch::dtype(torch::kDouble));
         // puts("PASSED #0");
-        torch::Tensor WQ = saved[1], d_WQ = torch::empty({ D, D });
+        torch::Tensor WQ = saved[1], d_WQ = torch::zeros({ D, D }, torch::dtype(torch::kDouble));
         // puts("PASSED #0");
-        torch::Tensor BQ = saved[2], d_BQ = torch::empty({ D });
-        torch::Tensor WK = saved[3], d_WK = torch::empty({ D, D });
-        torch::Tensor BK = saved[4], d_BK = torch::empty({ D });
-        torch::Tensor WV = saved[5], d_WV = torch::empty({ D, D });
-        torch::Tensor BV = saved[6], d_BV = torch::empty({ D });
+        torch::Tensor BQ = saved[2], d_BQ = torch::zeros({ D }, torch::dtype(torch::kDouble));
+        torch::Tensor WK = saved[3], d_WK = torch::zeros({ D, D }, torch::dtype(torch::kDouble));
+        torch::Tensor BK = saved[4], d_BK = torch::zeros({ D }, torch::dtype(torch::kDouble));
+        torch::Tensor WV = saved[5], d_WV = torch::zeros({ D, D }, torch::dtype(torch::kDouble));
+        torch::Tensor BV = saved[6], d_BV = torch::zeros({ D }, torch::dtype(torch::kDouble));
         // puts("PASSED #0");
-        torch::Tensor WX = saved[7], d_WX = torch::empty({ D, D });
-        torch::Tensor BX = saved[8], d_BX = torch::empty({ D });
+        torch::Tensor WX = saved[7], d_WX = torch::zeros({ D, D }, torch::dtype(torch::kDouble));
+        torch::Tensor BX = saved[8], d_BX = torch::zeros({ D }, torch::dtype(torch::kDouble));
         
         int SK = saved[9].size(1);
-        torch::Tensor WF1 = saved[9], d_WF1 = torch::empty({ D, SK });
-        torch::Tensor BF1 = saved[10], d_BF1 = torch::empty({ SK });
-        torch::Tensor WF2 = saved[11], d_WF2 = torch::empty({ SK, D });
-        torch::Tensor BF2 = saved[12], d_BF2 = torch::empty({ D });
+        torch::Tensor WF1 = saved[9], d_WF1 = torch::zeros({ D, SK }, torch::dtype(torch::kDouble));
+        torch::Tensor BF1 = saved[10], d_BF1 = torch::zeros({ SK }, torch::dtype(torch::kDouble));
+        torch::Tensor WF2 = saved[11], d_WF2 = torch::zeros({ SK, D }, torch::dtype(torch::kDouble));
+        torch::Tensor BF2 = saved[12], d_BF2 = torch::zeros({ D }, torch::dtype(torch::kDouble));
         torch::Tensor output2 = saved[13];
         torch::Tensor std1 = saved[14];
         torch::Tensor output1 = saved[15];
@@ -104,28 +104,29 @@ public:
         
         d_output /= (std1 + eps);
 
+        d_input += d_output;
         d_BX = d_output.sum(at::IntArrayRef({0, 1}));
         d_WX = torch::matmul(output2.transpose(-2, -1), d_output).sum(0);
         d_output = torch::matmul(d_output, WX.transpose(-2, -1));
         // puts("PASSED #4");
-        d_input += d_output;
         d_output = d_output.contiguous().view({B, -1, L, D / d_k}).transpose(1, 2);
         // puts("PASSED #5");
         // notice: the generation of Q, KT need scale. 
-        auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, D / d_k}).transpose(1, 2) / sqrt(D / d_k);
-        auto K = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2) / sqrt(D / d_k);
+        auto Q = (torch::matmul(input, WQ) + BQ).view({B, -1, L, D / d_k}).transpose(1, 2);
+        auto K = (torch::matmul(input, WK) + BK).view({B, -1, L, D / d_k}).transpose(1, 2);
         auto V = (torch::matmul(input, WV) + BV).view({B, -1, L, D / d_k}).transpose(1, 2);
-        auto scores_sm = (torch::matmul(Q, K.transpose(-2, -1)) * sqrt(D / d_k));//.softmax(-1);
+        auto scores_sm = (torch::matmul(Q, K.transpose(-2, -1)) / sqrt(D / d_k)).softmax(-1);
         //auto scores_sm = scores.softmax(-1);
         // puts("PASSED #6");
         auto d_V = torch::matmul(scores_sm.transpose(-2, -1), d_output).transpose(1, 2).contiguous().view({B, L, D});
         d_output = torch::matmul(d_output, V.transpose(-2, -1));
         // d_softmax !
         //printf("%d %d %d\n", d_R.size(0), d_R.size(1), d_R.size(2));
-        // d_R = scores_sm * (d_R - (scores_sm * d_R).sum({-1}, true));
+        d_output = scores_sm * (d_output - (scores_sm * d_output).sum({-1}, true));
+        // d_output = (scores_sm * (torch::eye(d_k).expand({B, L, d_k, d_k}) - scores_sm)) * d_output;
         // 
-        auto d_Q = torch::matmul(d_output, K).transpose(1, 2).contiguous().view({B, L, D});
-        auto d_K = torch::matmul(Q.transpose(-2, -1), d_output).transpose(-2, -1).transpose(1, 2).contiguous().view({B, L, D}); 
+        auto d_Q = torch::matmul(d_output, K / sqrt(D / d_k)).transpose(1, 2).contiguous().view({B, L, D});
+        auto d_K = torch::matmul(Q.transpose(-2, -1) / sqrt(D / d_k), d_output).transpose(-2, -1).transpose(1, 2).contiguous().view({B, L, D}); 
         // puts("PASSED #7");
         // notice: d_* means the (input \times W*) + B*, except d_R
         auto linearBackward = [&](const torch::Tensor &dy, torch::Tensor &dw, torch::Tensor &db, const torch::Tensor &W) {

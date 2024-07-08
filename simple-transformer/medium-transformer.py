@@ -156,7 +156,7 @@ def grad_check():
         WF1, BF1,
         WF2, BF2
     )):
-        print("OK")
+        print("Custom transformer block - grad test Passed.")
     else:
         print("WA")
         assert 0

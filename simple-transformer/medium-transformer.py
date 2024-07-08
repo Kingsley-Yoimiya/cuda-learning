@@ -6,6 +6,9 @@ import copy
 import math
 from torch.utils.cpp_extension import load_inline
 
+device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+print("Current device:", device)
+
 # 1. 定义自定义的Transformer模型，用于序列预测
 class Tr_Config:
     def __init__(self, **kwargs):
@@ -21,8 +24,8 @@ def clones(module, N):
 class LayerNorm(nn.Module):
     def __init__(self, size, eps = 1e-6):
         super().__init__()
-        self.a = nn.Parameter(torch.ones(size))
-        self.b = nn.Parameter(torch.zeros(size))
+        self.a = nn.Parameter(torch.ones(size, device=device))
+        self.b = nn.Parameter(torch.zeros(size, device=device))
         self.eps = eps
     def forward(self, x):
         # print(x.shape)
@@ -43,18 +46,18 @@ class EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.D = config.hidden_size
-        self.WQ = torch.nn.Parameter(torch.empty(self.D, self.D))
-        self.BQ = torch.nn.Parameter(torch.empty(self.D))
-        self.WK = torch.nn.Parameter(torch.empty(self.D, self.D))
-        self.BK = torch.nn.Parameter(torch.empty(self.D))
-        self.WV = torch.nn.Parameter(torch.empty(self.D, self.D))
-        self.BV = torch.nn.Parameter(torch.empty(self.D))
-        self.WX = torch.nn.Parameter(torch.empty(self.D, self.D))
-        self.BX = torch.nn.Parameter(torch.empty(self.D))
-        self.WF1 = torch.nn.Parameter(torch.empty(self.D, config.intermediate_size))
-        self.BF1 = torch.nn.Parameter(torch.empty(config.intermediate_size))
-        self.WF2 = torch.nn.Parameter(torch.empty(config.intermediate_size, self.D))
-        self.BF2 = torch.nn.Parameter(torch.empty(self.D))
+        self.WQ = torch.nn.Parameter(torch.empty((self.D, self.D), device=device))
+        self.BQ = torch.nn.Parameter(torch.empty((self.D), device=device))
+        self.WK = torch.nn.Parameter(torch.empty((self.D, self.D), device=device))
+        self.BK = torch.nn.Parameter(torch.empty((self.D), device=device))
+        self.WV = torch.nn.Parameter(torch.empty((self.D, self.D), device=device))
+        self.BV = torch.nn.Parameter(torch.empty((self.D), device=device))
+        self.WX = torch.nn.Parameter(torch.empty((self.D, self.D), device=device))
+        self.BX = torch.nn.Parameter(torch.empty((self.D), device=device))
+        self.WF1 = torch.nn.Parameter(torch.empty((self.D, config.intermediate_size), device=device))
+        self.BF1 = torch.nn.Parameter(torch.empty((config.intermediate_size), device=device))
+        self.WF2 = torch.nn.Parameter(torch.empty((config.intermediate_size, self.D), device=device))
+        self.BF2 = torch.nn.Parameter(torch.empty((self.D), device=device))
         
         self.heads = config.num_attention_heads
         assert config.hidden_size % self.heads == 0
@@ -133,19 +136,19 @@ model = ClickPredictionModel(config)
 def grad_check():
     B, L, D, K = 5, 8, 24, 10
     d_k = 12
-    input_tensor = torch.randn(B, L, D, dtype=torch.double, requires_grad=True)
-    WQ = torch.randn(D, D, dtype=torch.double, requires_grad=True)
-    BQ = torch.randn(D, dtype=torch.double, requires_grad=True)
-    WK = torch.randn(D, D, dtype=torch.double, requires_grad=True)
-    BK = torch.randn(D, dtype=torch.double, requires_grad=True)
-    WV = torch.randn(D, D, dtype=torch.double, requires_grad=True)
-    BV = torch.randn(D, dtype=torch.double, requires_grad=True)
-    WX = torch.randn(D, D, dtype=torch.double, requires_grad=True)
-    BX = torch.randn(D, dtype=torch.double, requires_grad=True)
-    WF1 = torch.randn(D, K, dtype=torch.double, requires_grad=True)
-    BF1 = torch.randn(K, dtype=torch.double, requires_grad=True)
-    WF2 = torch.randn(K, D, dtype=torch.double, requires_grad=True)
-    BF2 = torch.randn(D, dtype=torch.double, requires_grad=True)
+    input_tensor = torch.randn(B, L, D, dtype=torch.double, requires_grad=True, device = device)
+    WQ = torch.randn(D, D, dtype=torch.double, requires_grad=True, device = device)
+    BQ = torch.randn(D, dtype=torch.double, requires_grad=True, device = device)
+    WK = torch.randn(D, D, dtype=torch.double, requires_grad=True, device = device)
+    BK = torch.randn(D, dtype=torch.double, requires_grad=True, device = device)
+    WV = torch.randn(D, D, dtype=torch.double, requires_grad=True, device = device)
+    BV = torch.randn(D, dtype=torch.double, requires_grad=True, device = device)
+    WX = torch.randn(D, D, dtype=torch.double, requires_grad=True, device = device)
+    BX = torch.randn(D, dtype=torch.double, requires_grad=True, device = device)
+    WF1 = torch.randn(D, K, dtype=torch.double, requires_grad=True, device = device)
+    BF1 = torch.randn(K, dtype=torch.double, requires_grad=True, device = device)
+    WF2 = torch.randn(K, D, dtype=torch.double, requires_grad=True, device = device)
+    BF2 = torch.randn(D, dtype=torch.double, requires_grad=True, device = device)
     
     if torch.autograd.gradcheck(transf_cpp.forward, (
         input_tensor, d_k,

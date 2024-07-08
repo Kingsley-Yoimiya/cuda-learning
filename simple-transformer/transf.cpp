@@ -35,10 +35,9 @@ public:
     output = torch::matmul(output, WX) + BX + input;
     // LayerNorm
     auto mean = output.mean(-1, true);
-    auto std = output.std(
-        -1, false,
-        true); // refer to
-               // https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
+    auto std = output.std(-1, false, true);
+    // refer to
+    // https://pytorch.org/cppdocs/api/classat_1_1_tensor.html#_CPPv4NK2at6TensorStEN2at11DimnameListEbb
     saved_list.emplace_back(mean);          // mean1
     saved_list.emplace_back(std);           // std1
     saved_list.emplace_back(output);        // output_t1
@@ -59,26 +58,28 @@ public:
   static torch::autograd::tensor_list
   backward(torch::autograd::AutogradContext *ctx,
            torch::autograd::tensor_list grad_output) {
+    auto device = torch::cuda::is_available() ? torch::Device("cuda:0")
+                                              : torch::Device("cpu");
     auto saved = ctx->get_saved_variables();
     auto d_output = grad_output[0];
     int B = saved[0].size(0), L = saved[0].size(1), D = saved[0].size(2);
     int d_k = ctx->saved_data["d_k"].toInt(), SK = saved[9].size(1);
-    torch::Tensor input = saved[0], d_input = torch::zeros({B, L, D}),
-                  WQ = saved[1], d_WQ = torch::zeros({D, D}), BQ = saved[2],
-                  d_BQ = torch::zeros({D}), WK = saved[3],
-                  d_WK = torch::zeros({D, D}), BK = saved[4],
-                  d_BK = torch::zeros({D}), WV = saved[5],
-                  d_WV = torch::zeros({D, D}), BV = saved[6],
-                  d_BV = torch::zeros({D}), WX = saved[7],
-                  d_WX = torch::zeros({D, D}), BX = saved[8],
-                  d_BX = torch::zeros({D}), WF1 = saved[9],
-                  d_WF1 = torch::zeros({D, SK}), BF1 = saved[10],
-                  d_BF1 = torch::zeros({SK}), WF2 = saved[11],
-                  d_WF2 = torch::zeros({SK, D}), BF2 = saved[12],
-                  d_BF2 = torch::zeros({D}), output2 = saved[13],
-                  mean1 = saved[14], std1 = saved[15], output_t1 = saved[16],
-                  output1 = saved[17], mean2 = saved[18], std2 = saved[19],
-                  output_t2 = saved[20];
+    torch::Tensor input = saved[0], d_input = torch::zeros({B, L, D}, device),
+                  WQ = saved[1], d_WQ = torch::zeros({D, D}, device),
+                  BQ = saved[2], d_BQ = torch::zeros({D}, device),
+                  WK = saved[3], d_WK = torch::zeros({D, D}, device),
+                  BK = saved[4], d_BK = torch::zeros({D}, device),
+                  WV = saved[5], d_WV = torch::zeros({D, D}, device),
+                  BV = saved[6], d_BV = torch::zeros({D}, device),
+                  WX = saved[7], d_WX = torch::zeros({D, D}, device),
+                  BX = saved[8], d_BX = torch::zeros({D}, device),
+                  WF1 = saved[9], d_WF1 = torch::zeros({D, SK}, device),
+                  BF1 = saved[10], d_BF1 = torch::zeros({SK}, device),
+                  WF2 = saved[11], d_WF2 = torch::zeros({SK, D}, device),
+                  BF2 = saved[12], d_BF2 = torch::zeros({D}, device),
+                  output2 = saved[13], mean1 = saved[14], std1 = saved[15],
+                  output_t1 = saved[16], output1 = saved[17], mean2 = saved[18],
+                  std2 = saved[19], output_t2 = saved[20];
 
     auto batchnorm_backward = [&](torch::Tensor &dL_doutput_norm,
                                   const torch::Tensor &output,

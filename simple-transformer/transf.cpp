@@ -62,7 +62,7 @@ public:
     auto saved = ctx->get_saved_variables();
     auto d_output = grad_output[0];
     int B = saved[0].size(0), L = saved[0].size(1), D = saved[0].size(2);
-    int d_k = ctx->saved_data["d_k"].toInt();
+    int d_k = ctx->saved_data["d_k"].toInt(), SK = saved[9].size(1);
     torch::Tensor input = saved[0], d_input = torch::zeros({B, L, D}),
                   WQ = saved[1], d_WQ = torch::zeros({D, D}), BQ = saved[2],
                   d_BQ = torch::zeros({D}), WK = saved[3],
@@ -71,25 +71,14 @@ public:
                   d_WV = torch::zeros({D, D}), BV = saved[6],
                   d_BV = torch::zeros({D}), WX = saved[7],
                   d_WX = torch::zeros({D, D}), BX = saved[8],
-                  d_BX = torch::zeros({D});
-
-    int SK = saved[9].size(1);
-    torch::Tensor WF1 = saved[9],
-                  d_WF1 = torch::zeros({D, SK}, torch::dtype(torch::kDouble));
-    torch::Tensor BF1 = saved[10],
-                  d_BF1 = torch::zeros({SK}, torch::dtype(torch::kDouble));
-    torch::Tensor WF2 = saved[11],
-                  d_WF2 = torch::zeros({SK, D}, torch::dtype(torch::kDouble));
-    torch::Tensor BF2 = saved[12],
-                  d_BF2 = torch::zeros({D}, torch::dtype(torch::kDouble));
-    torch::Tensor output2 = saved[13];
-    torch::Tensor mean1 = saved[14];
-    torch::Tensor std1 = saved[15];
-    torch::Tensor output_t1 = saved[16];
-    torch::Tensor output1 = saved[17];
-    torch::Tensor mean2 = saved[18];
-    torch::Tensor std2 = saved[19];
-    torch::Tensor output_t2 = saved[20];
+                  d_BX = torch::zeros({D}), WF1 = saved[9],
+                  d_WF1 = torch::zeros({D, SK}), BF1 = saved[10],
+                  d_BF1 = torch::zeros({SK}), WF2 = saved[11],
+                  d_WF2 = torch::zeros({SK, D}), BF2 = saved[12],
+                  d_BF2 = torch::zeros({D}), output2 = saved[13],
+                  mean1 = saved[14], std1 = saved[15], output_t1 = saved[16],
+                  output1 = saved[17], mean2 = saved[18], std2 = saved[19],
+                  output_t2 = saved[20];
 
     auto batchnorm_backward = [&](torch::Tensor &dL_doutput_norm,
                                   const torch::Tensor &output,

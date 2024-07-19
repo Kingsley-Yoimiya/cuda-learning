@@ -60,8 +60,8 @@ class EncoderLayer(nn.Module):
         self.BF2 = torch.nn.Parameter(torch.empty((self.D), device=device))
         
         self.heads = config.num_attention_heads
-        assert config.hidden_size % self.heads == 0
-        self.d_k = config.hidden_size // self.heads
+        # assert config.hidden_size % self.heads == 0
+        self.d_k = self.heads
         self.reset_parameters()
     
     def reset_parameters(self):
@@ -118,8 +118,8 @@ def create_dataset_from_embeddings(embedding_file):
     embeddings = torch.load(embedding_file)
 
     # 创建输入和标签
-    input_ids = embeddings[:, :-1, :]  # 所有序列，去掉最后一个作为输入
-    labels = embeddings[:, 1:, :]  # 所有序列，去掉第一个作为标签
+    input_ids = embeddings[:, :-8, :]  # 所有序列，去掉最后一个作为输入
+    labels = embeddings[:, 8:, :]  # 所有序列，去掉第一个作为标签
 
     return Dataset.from_dict({'input_ids': input_ids, 'labels': labels})
 
@@ -127,15 +127,15 @@ def create_dataset_from_embeddings(embedding_file):
 config = Tr_Config(
         hidden_size=108, 
         num_hidden_layers=12, 
-        num_attention_heads=12, 
+        num_attention_heads=8, 
         intermediate_size=3072,
         drop_out = 0.1,
     )
 model = ClickPredictionModel(config)
 
 def grad_check():
-    B, L, D, K = 5, 8, 24, 10
-    d_k = 12
+    B, L, D, K = 5, 32, 24, 10
+    d_k = 8
     input_tensor = torch.randn(B, L, D, dtype=torch.double, requires_grad=True, device = device)
     WQ = torch.randn(D, D, dtype=torch.double, requires_grad=True, device = device)
     BQ = torch.randn(D, dtype=torch.double, requires_grad=True, device = device)

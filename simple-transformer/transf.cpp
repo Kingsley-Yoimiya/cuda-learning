@@ -6,6 +6,8 @@
 
 const double eps = 1e-6;
 
+// d_k means heads num
+
 class transformerFunc : public torch::autograd::Function<transformerFunc> {
 public:
   static torch::Tensor
@@ -19,16 +21,16 @@ public:
                                              WX,    BX, WF1, BF1, WF2, BF2};
     ctx->saved_data["d_k"] = d_k;
     auto Q = (torch::matmul(input, WQ) + BQ)
-                 .view({B, -1, L, D / d_k})
+                 .view({B, -1, L / d_k, D})
                  .transpose(1, 2);
     auto KT = (torch::matmul(input, WK) + BK)
-                  .view({B, -1, L, D / d_k})
+                  .view({B, -1, L / d_k, D})
                   .transpose(1, 2)
                   .transpose(-2, -1);
     auto V = (torch::matmul(input, WV) + BV)
-                 .view({B, -1, L, D / d_k})
+                 .view({B, -1, L / d_k, D})
                  .transpose(1, 2);
-    auto scores = torch::matmul(Q, KT) / sqrt(D / d_k);
+    auto scores = torch::matmul(Q, KT) / sqrt(D);
     auto output = torch::matmul(scores.softmax(-1), V);
     output = output.transpose(1, 2).contiguous().view({B, L, D}); // output2
     saved_list.emplace_back(output);
@@ -111,18 +113,18 @@ public:
     d_BX = d_output.sum(at::IntArrayRef({0, 1}));
     d_WX = torch::matmul(output2.transpose(-2, -1), d_output).sum(0);
     d_output = torch::matmul(d_output, WX.transpose(-2, -1));
-    d_output = d_output.contiguous().view({B, -1, L, D / d_k}).transpose(1, 2);
+    d_output = d_output.contiguous().view({B, -1, L / d_k, D}).transpose(1, 2);
     auto Q = (torch::matmul(input, WQ) + BQ)
-                 .view({B, -1, L, D / d_k})
+                 .view({B, -1, L / d_k, D})
                  .transpose(1, 2);
     auto K = (torch::matmul(input, WK) + BK)
-                 .view({B, -1, L, D / d_k})
+                 .view({B, -1, L / d_k, D})
                  .transpose(1, 2);
     auto V = (torch::matmul(input, WV) + BV)
-                 .view({B, -1, L, D / d_k})
+                 .view({B, -1, L / d_k, D})
                  .transpose(1, 2);
     auto scores_sm =
-        (torch::matmul(Q, K.transpose(-2, -1)) / sqrt(D / d_k)).softmax(-1);
+        (torch::matmul(Q, K.transpose(-2, -1)) / sqrt(D)).softmax(-1);
     auto d_V = torch::matmul(scores_sm.transpose(-2, -1), d_output)
                    .transpose(1, 2)
                    .contiguous()
@@ -131,11 +133,11 @@ public:
     // d_softmax !
     d_output = scores_sm * (d_output - (scores_sm * d_output).sum({-1}, true));
     //
-    auto d_Q = torch::matmul(d_output, K / sqrt(D / d_k))
+    auto d_Q = torch::matmul(d_output, K / sqrt(D))
                    .transpose(1, 2)
                    .contiguous()
                    .view({B, L, D});
-    auto d_K = torch::matmul(Q.transpose(-2, -1) / sqrt(D / d_k), d_output)
+    auto d_K = torch::matmul(Q.transpose(-2, -1) / sqrt(D), d_output)
                    .transpose(-2, -1)
                    .transpose(1, 2)
                    .contiguous()
